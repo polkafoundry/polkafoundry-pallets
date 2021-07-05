@@ -77,6 +77,7 @@ create_currency_id! {
 
 		PKS("PolkaSmith", 18) = 100,
 		sUSD("PolkaSmith Dollar", 18) = 101,
+		KSM("Kusama", 12) = 102,
 	}
 }
 
