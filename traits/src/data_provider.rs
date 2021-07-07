@@ -15,9 +15,11 @@ pub trait DataProvider<Key, Value> {
 
 /// Extended data provider to provide timestamped data by key with no-op, and
 /// all data.
-pub trait DataProviderExtended<Key, TimestampedValue> {
+pub trait DataProviderExtended<Key, AccountId, TimestampedValue> {
 	/// Get timestamped value by key
-	fn get_no_op(key: &Key) -> Option<TimestampedValue>;
+	fn get_polkafoundry(key: &Key, feeder: AccountId) -> Option<TimestampedValue>;
+	/// Get timestamped value by key
+	fn get_concrete(key: &Key, feeder: AccountId) -> Option<TimestampedValue>;
 	/// Provide a list of tuples of key and timestamped value
 	fn get_all_values() -> Vec<(Key, Option<TimestampedValue>)>;
 }
