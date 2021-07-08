@@ -67,11 +67,10 @@ pub trait OracleApi<BlockHash, ProviderId, AccountId, Key, Value> {
 		at: Option<BlockHash>,
 	) -> Result<Option<Value>>;
 
-	#[rpc(name = "oracle_get_all_value")]
-	fn get_all_value(
+	#[rpc(name = "oracle_get_all_values")]
+	fn get_all_values(
 		&self,
 		provider_id: ProviderId,
-		key: Key,
 		at: Option<BlockHash>,
 	) -> Result<Vec<(Key, Option<Value>)>> ;
 }
@@ -141,10 +140,9 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 		})
 	}
 
-	fn get_all_value(
+	fn get_all_values(
 		&self,
 		provider_id: ProviderId,
-		key: Key,
 		at: Option<<Block as BlockT>::Hash>
 	) -> Result<Vec<(Key, Option<Value>)>>  {
 		let api = self.client.runtime_api();
@@ -152,7 +150,7 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 			// If the block hash is not supplied assume the best block.
 			self.client.info().best_hash,
 		));
-		api.get_all_value(&at, provider_id, key).map_err(|e| RpcError {
+		api.get_all_values(&at, provider_id).map_err(|e| RpcError {
 			code: ErrorCode::ServerError(Error::RuntimeError.into()),
 			message: "Unable to get all value.".into(),
 			data: Some(format!("{:?}", e).into()),

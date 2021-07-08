@@ -13,6 +13,6 @@ sp_api::decl_runtime_apis! {
 		fn get(provider_id: ProviderId, key: Key) -> Option<Value>;
 		fn get_polkafoundry(provider_id: ProviderId, key: Key, feeder: AccountId) -> Option<Value>;
 		fn get_concrete(provider_id: ProviderId, key: Key, feeder: AccountId) -> Option<Value>;
-		fn get_all_value(provider_id: ProviderId, key: Key) -> Vec<(Key, Option<Value>)>;
+		fn get_all_values(provider_id: ProviderId) -> Vec<(Key, Option<Value>)>;
 	}
 }
