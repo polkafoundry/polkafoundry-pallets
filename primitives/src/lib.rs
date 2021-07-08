@@ -7,3 +7,5 @@ pub use currency::{CurrencyId, TokenSymbol};
 
 #[cfg(test)]
 mod tests;
+
+pub type Amount = i128;
