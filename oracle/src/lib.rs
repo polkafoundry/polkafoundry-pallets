@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+
 use codec::{Decode, Encode};
 
 #[cfg(feature = "std")]
@@ -16,6 +17,11 @@ use sp_std::marker;
 pub use orml_traits::{CombineData, DataFeeder, DataProvider, DataProviderExtended, OnNewData};
 
 pub use pallet::*;
+
+#[cfg(test)]
+mod mock;
+#[cfg(test)]
+mod tests;
 
 pub(crate) type MomentOf<T, I = ()> = <<T as Config<I>>::Time as Time>::Moment;
 pub(crate) type TimestampedValueOf<T, I = ()> = TimestampedValue<<T as Config<I>>::FeedValue, MomentOf<T, I>>;
@@ -60,7 +66,9 @@ pub mod pallet {
 		/// Feeder has already feeded at this block
 		AlreadyFeeded,
 		/// Already a feeder
-		AlreadyFeeder
+		AlreadyFeeder,
+		/// Not a feeder
+		NotFeeder
 	}
 
 	#[pallet::event]
@@ -72,6 +80,8 @@ pub mod pallet {
 		NewFeederElected(T::AccountId),
 		/// New feeder is elected. [feeder, fee]
 		FeeSetted(T::AccountId, BalanceOf<T, I>),
+		/// Remove a feeder. [feeder]
+		RemoveFeeder(T::AccountId),
 	}
 
 	#[pallet::storage]
@@ -121,6 +131,26 @@ pub mod pallet {
 		}
 	}
 
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
+		pub feeders: Vec<T::AccountId>,
+		pub _phantom: marker::PhantomData<I>
+	}
+
+	#[cfg(feature = "std")]
+	impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
+		fn default() -> Self {
+			GenesisConfig { feeders: vec![], _phantom: Default::default() }
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
+		fn build(&self) {
+			<Feeders<T, I>>::put(&self.feeders);
+		}
+	}
+
 	#[pallet::call]
 	impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		#[pallet::weight(0)]
@@ -136,6 +166,24 @@ pub mod pallet {
 			<Feeders<T, I>>::put(feeders);
 
 			Self::deposit_event(Event::NewFeederElected(feeder));
+
+			Ok(().into())
+		}
+
+		#[pallet::weight(0)]
+		pub fn remove_feeder(
+			origin: OriginFor<T>,
+			feeder: T::AccountId
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			let mut feeders = <Feeders<T, I>>::get();
+			let location = feeders.binary_search(&feeder).ok().ok_or(Error::<T, I>::NotFeeder)?;
+			feeders.remove(location);
+
+			<Feeders<T, I>>::put(feeders);
+			<AllValue<T, I>>::remove_prefix(&feeder);
+
+			Self::deposit_event(Event::RemoveFeeder(feeder));
 
 			Ok(().into())
 		}
@@ -187,6 +235,7 @@ impl <T: Config<I>, I: 'static> Pallet<T, I> {
 			<IsCombined<T, I>>::remove(&key);
 			<AllValue<T, I>>::insert(&who, &key, timestamped_value)
 		}
+		<HasFeeded<T, I>>::insert(&who, true);
 
 		Self::deposit_event(Event::NewFeedData(who, values));
 		Ok(())
@@ -305,8 +354,10 @@ for DefaultCombineData<T, MinimumCount, ExpiresIn, I>
 		}
 
 		let mid_index = count / 2;
+
 		// Won't panic as `values` ensured not empty.
 		let (_, value, _) = values.select_nth_unstable_by(mid_index as usize, |a, b| a.value.cmp(&b.value));
+
 		Some(value.clone())
 	}
 }
