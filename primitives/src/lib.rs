@@ -5,7 +5,7 @@ pub mod evm;
 use codec::{Encode, Decode};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use sp_runtime::RuntimeDebug;
+use sp_runtime::{RuntimeDebug, FixedU128};
 
 pub use currency::{CurrencyId, TokenSymbol};
 
@@ -20,4 +20,8 @@ pub enum DataProviderId {
 	Concrete = 2,
 	All = 3,
 }
+
+pub type Amount = i128;
+pub type Price = FixedU128;
+
 

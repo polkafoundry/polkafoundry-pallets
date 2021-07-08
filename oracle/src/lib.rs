@@ -13,6 +13,7 @@ use frame_support::{
 };
 use frame_system::{pallet_prelude::*};
 use sp_std::marker;
+use sp_std::{prelude::*, vec};
 
 pub use orml_traits::{CombineData, DataFeeder, DataProvider, DataProviderExtended, OnNewData};
 
@@ -22,6 +23,8 @@ pub use pallet::*;
 mod mock;
 #[cfg(test)]
 mod tests;
+#[cfg(any(feature = "runtime-benchmarks", test))]
+mod benchmarking;
 
 pub(crate) type MomentOf<T, I = ()> = <<T as Config<I>>::Time as Time>::Moment;
 pub(crate) type TimestampedValueOf<T, I = ()> = TimestampedValue<<T as Config<I>>::FeedValue, MomentOf<T, I>>;
