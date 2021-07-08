@@ -8,7 +8,7 @@ use frame_support::{
 	pallet_prelude::*,
 	traits::{Get, Time, Currency},
 	weights::{Pays, Weight},
-	Parameter, PalletId
+	Parameter
 };
 use frame_system::{pallet_prelude::*};
 use sp_std::marker;
@@ -16,7 +16,6 @@ use sp_std::marker;
 pub use orml_traits::{CombineData, DataFeeder, DataProvider, DataProviderExtended, OnNewData};
 
 pub use pallet::*;
-use frame_support::traits::InstanceFilter;
 
 pub(crate) type MomentOf<T, I = ()> = <<T as Config<I>>::Time as Time>::Moment;
 pub(crate) type TimestampedValueOf<T, I = ()> = TimestampedValue<<T as Config<I>>::FeedValue, MomentOf<T, I>>;
@@ -250,9 +249,9 @@ impl <T: Config<I>, I: 'static> Pallet<T, I> {
 	}
 }
 
-impl<T: Config<I>, I: 'static> DataProvider<T::FeedKey, T::FeedValue> for Pallet<T, I> {
-	fn get(key: &T::FeedKey) -> Option<T::FeedValue> {
-		Self::get(key).map(|timestamped_value| timestamped_value.value)
+impl<T: Config<I>, I: 'static> DataProvider<T::FeedKey, TimestampedValueOf<T, I>> for Pallet<T, I> {
+	fn get(key: &T::FeedKey) -> Option<TimestampedValueOf<T, I>> {
+		Self::get(key)
 	}
 }
 
