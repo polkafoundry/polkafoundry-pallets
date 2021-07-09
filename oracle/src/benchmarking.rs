@@ -1,35 +1,41 @@
+#![cfg(feature = "runtime-benchmarks")]
+
 use super::*;
 use crate::Pallet as Oracle;
 
 use frame_system::RawOrigin;
+use frame_support::{assert_ok};
 pub use frame_benchmarking::{
 	benchmarks, account, whitelisted_caller, whitelist_account, impl_benchmark_test_suite,
 };
-
-const DOT: u32 = 1;
-const KSM: u32 = 2;
-const BTC: u32 = 3;
-const ETH: u32 = 4;
-const PKF_FEEDER: u64 = crate::mock::POLKAFOUNDRY;
-
-const KEY: Vec<u32> = vec![DOT, KSM, BTC, ETH];
+const USER_SEED: u32 = 999666;
 
 benchmarks! {
-	feed_values {
-		let mut values = vec![];
-		for i in 0..KEY.len() - 1 {
-			values.push((KEY[i as usize], 1));
-		}
-
-	}: _(RawOrigin::Signed(PKF_FEEDER), values)
+	elect_feeder {
+		let feeder: T::AccountId = account("feeder", 0u32, USER_SEED);
+	}: _(RawOrigin::Root, feeder.clone())
 	verify {
-		assert_eq!(AllValue::<T>::len(), 4);
+		let mut feeders = <Feeders<T>>::get();
+		assert_ok!(feeders.binary_search(&feeder));
+	}
+	set_fee {
+		let caller: T::AccountId = whitelisted_caller();
+	}: _(RawOrigin::Signed(caller.clone()), 1u32.into())
+	verify {
+		assert_eq!(<Fees<T>>::get(caller), 1u32.into());
+	}
+	remove_feeder {
+		let caller: T::AccountId = whitelisted_caller();
+	}: _(RawOrigin::Root, caller.clone())
+	verify {
+		let mut feeders = <Feeders<T>>::get();
+		assert_eq!(feeders.binary_search(&caller), Err(0));
 	}
 }
 
 impl_benchmark_test_suite!(
 	Oracle,
-	crate::mock::ExtBuilder::default().feeders(vec![PKF_FEEDER]),
+	crate::mock::ExtBuilder::default().feeders(vec![frame_benchmarking::whitelisted_caller()]),
 	crate::mock::Test,
 	exec_name = build_and_execute
 );

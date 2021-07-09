@@ -40,11 +40,10 @@ impl<C, B> Oracle<C, B> {
 }
 
 #[rpc]
-pub trait OracleApi<BlockHash, ProviderId, AccountId, Key, Value> {
+pub trait OracleApi<BlockHash, AccountId, Key, Value> {
 	#[rpc(name = "oracle_get")]
 	fn get(
 		&self,
-		provider_id: ProviderId,
 		key: Key,
 		at: Option<BlockHash>,
 	) -> Result<Option<Value>>;
@@ -52,16 +51,13 @@ pub trait OracleApi<BlockHash, ProviderId, AccountId, Key, Value> {
 	#[rpc(name = "oracle_get_polkafoundry")]
 	fn get_polkafoundry(
 		&self,
-		provider_id: ProviderId,
 		key: Key,
-		feeder: AccountId,
 		at: Option<BlockHash>,
 	) -> Result<Option<Value>>;
 
 	#[rpc(name = "oracle_get_concrete")]
 	fn get_concrete(
 		&self,
-		provider_id: ProviderId,
 		key: Key,
 		feeder: AccountId,
 		at: Option<BlockHash>,
@@ -70,23 +66,20 @@ pub trait OracleApi<BlockHash, ProviderId, AccountId, Key, Value> {
 	#[rpc(name = "oracle_get_all_values")]
 	fn get_all_values(
 		&self,
-		provider_id: ProviderId,
 		at: Option<BlockHash>,
 	) -> Result<Vec<(Key, Option<Value>)>> ;
 }
 
-impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::Hash, ProviderId, AccountId, Key, Value> for Oracle<C, Block> where
+impl<C, Block, AccountId, Key, Value> OracleApi<<Block as BlockT>::Hash, AccountId, Key, Value> for Oracle<C, Block> where
 	Block: BlockT,
 	C: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-	C::Api: OracleRuntimeApi<Block, ProviderId, AccountId, Key, Value>,
-	ProviderId: Codec,
+	C::Api: OracleRuntimeApi<Block, AccountId, Key, Value>,
 	AccountId: Codec,
 	Key: Codec,
 	Value: Codec,
 {
 	fn get(
 		&self,
-		provider_id: ProviderId,
 		key: Key,
 		at: Option<<Block as BlockT>::Hash>
 	) -> Result<Option<Value>> {
@@ -95,7 +88,7 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 			// If the block hash is not supplied assume the best block.
 			self.client.info().best_hash,
 		));
-		api.get(&at, provider_id, key).map_err(|e| RpcError {
+		api.get(&at, key).map_err(|e| RpcError {
 			code: ErrorCode::ServerError(Error::RuntimeError.into()),
 			message: "Unable to get value.".into(),
 			data: Some(format!("{:?}", e).into()),
@@ -104,9 +97,7 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 
 	fn get_polkafoundry(
 		&self,
-		provider_id: ProviderId,
 		key: Key,
-		feeder: AccountId,
 		at: Option<<Block as BlockT>::Hash>
 	) -> Result<Option<Value>> {
 		let api = self.client.runtime_api();
@@ -114,7 +105,7 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 			// If the block hash is not supplied assume the best block.
 			self.client.info().best_hash,
 		));
-		api.get_polkafoundry(&at, provider_id, key, feeder).map_err(|e| RpcError {
+		api.get_polkafoundry(&at, key).map_err(|e| RpcError {
 			code: ErrorCode::ServerError(Error::RuntimeError.into()),
 			message: "Unable to get PolkaFoundry value.".into(),
 			data: Some(format!("{:?}", e).into()),
@@ -123,7 +114,6 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 
 	fn get_concrete(
 		&self,
-		provider_id: ProviderId,
 		key: Key,
 		feeder: AccountId,
 		at: Option<<Block as BlockT>::Hash>
@@ -133,7 +123,7 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 			// If the block hash is not supplied assume the best block.
 			self.client.info().best_hash,
 		));
-		api.get_concrete(&at, provider_id, key, feeder).map_err(|e| RpcError {
+		api.get_concrete(&at, key, feeder).map_err(|e| RpcError {
 			code: ErrorCode::ServerError(Error::RuntimeError.into()),
 			message: "Unable to get concrete value.".into(),
 			data: Some(format!("{:?}", e).into()),
@@ -142,7 +132,6 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 
 	fn get_all_values(
 		&self,
-		provider_id: ProviderId,
 		at: Option<<Block as BlockT>::Hash>
 	) -> Result<Vec<(Key, Option<Value>)>>  {
 		let api = self.client.runtime_api();
@@ -150,7 +139,7 @@ impl<C, Block, ProviderId, AccountId, Key, Value> OracleApi<<Block as BlockT>::H
 			// If the block hash is not supplied assume the best block.
 			self.client.info().best_hash,
 		));
-		api.get_all_values(&at, provider_id).map_err(|e| RpcError {
+		api.get_all_values(&at).map_err(|e| RpcError {
 			code: ErrorCode::ServerError(Error::RuntimeError.into()),
 			message: "Unable to get all value.".into(),
 			data: Some(format!("{:?}", e).into()),

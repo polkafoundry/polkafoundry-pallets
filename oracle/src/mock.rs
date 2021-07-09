@@ -14,8 +14,8 @@ use sp_core::H256;
 /// The AccountId alias in this test module.
 pub(crate) type AccountId = u64;
 pub(crate) type Balance = u64;
-type Key = u32;
-type Value = u32;
+pub(crate) type Key = u32;
+pub(crate) type Value = u32;
 
 pub const POLKAFOUNDRY: u64 = 1;
 pub const ALICE: u64 = 2;
