@@ -23,5 +23,3 @@ pub enum DataProviderId {
 
 pub type Amount = i128;
 pub type Price = FixedU128;
-
-
