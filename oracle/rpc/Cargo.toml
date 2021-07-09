@@ -1,0 +1,20 @@
+[package]
+name = "pkfp-oracle-rpc"
+version = "0.0.1"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "2" }
+jsonrpc-core = "15"
+jsonrpc-core-client = "15"
+jsonrpc-derive = "15"
+serde = { version = "1", features = ["derive"] }
+
+sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.7", default-features = false }
+sp-blockchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.7", default-features = false }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.7", default-features = false }
+sp-rpc = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.7", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.7", default-features = false }
+pkfp-oracle-runtime-api = { path = "./runtime-api" }

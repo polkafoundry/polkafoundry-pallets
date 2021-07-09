@@ -2,10 +2,24 @@
 
 pub mod currency;
 pub mod evm;
+use codec::{Encode, Decode};
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+use sp_runtime::{RuntimeDebug, FixedU128};
 
 pub use currency::{CurrencyId, TokenSymbol};
 
 #[cfg(test)]
 mod tests;
 
+#[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, PartialOrd, Ord)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum DataProviderId {
+	Combined = 0,
+	PolkaFoundry = 1,
+	Concrete = 2,
+	All = 3,
+}
+
 pub type Amount = i128;
+pub type Price = FixedU128;

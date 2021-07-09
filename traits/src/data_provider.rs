@@ -2,22 +2,24 @@ use sp_runtime::DispatchResult;
 use sp_std::vec::Vec;
 
 /// Data provider with ability to provide data with no-op, and provide all data.
-pub trait DataFeeder<Key, Value, AccountId>: DataProvider<Key, Value> {
+pub trait DataFeeder<Key, Value, AccountId> {
 	/// Provide a new value for a given key from an operator
 	fn feed_value(who: AccountId, key: Key, value: Value) -> DispatchResult;
 }
 
 /// A simple trait to provide data
-pub trait DataProvider<Key, Value> {
+pub trait DataProvider<Key, TimestampedValue> {
 	/// Get data by key
-	fn get(key: &Key) -> Option<Value>;
+	fn get(key: &Key) -> Option<TimestampedValue>;
 }
 
 /// Extended data provider to provide timestamped data by key with no-op, and
 /// all data.
-pub trait DataProviderExtended<Key, TimestampedValue> {
+pub trait DataProviderExtended<Key, AccountId, TimestampedValue> {
 	/// Get timestamped value by key
-	fn get_no_op(key: &Key) -> Option<TimestampedValue>;
+	fn get_polkafoundry(key: &Key, feeder: AccountId) -> Option<TimestampedValue>;
+	/// Get timestamped value by key
+	fn get_concrete(key: &Key, feeder: AccountId) -> Option<TimestampedValue>;
 	/// Provide a list of tuples of key and timestamped value
 	fn get_all_values() -> Vec<(Key, Option<TimestampedValue>)>;
 }

@@ -32,6 +32,25 @@ macro_rules! create_currency_id {
 			}
 		}
 
+		impl TryFrom<u8> for TokenSymbol {
+			type Error = ();
+
+			fn try_from(v: u8) -> Result<Self, Self::Error> {
+				match v {
+					$($val => Ok(TokenSymbol::$symbol),)*
+					_ => Err(()),
+				}
+			}
+		}
+
+		impl Into<u8> for TokenSymbol {
+			fn into(self) -> u8 {
+				match self {
+					$(TokenSymbol::$symbol => ($val),)*
+				}
+			}
+		}
+
 		impl TokenInfo for CurrencyId {
 			fn currency_id(&self) -> Option<u8> {
 				match self {
