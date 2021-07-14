@@ -130,7 +130,7 @@ pub mod pallet {
 
 		fn on_finalize(_n: T::BlockNumber) {
 			// cleanup for next block
-			<HasFeeded<T, I>>::remove_all();
+			<HasFeeded<T, I>>::remove_all(None);
 		}
 	}
 
@@ -184,7 +184,7 @@ pub mod pallet {
 			feeders.remove(location);
 
 			<Feeders<T, I>>::put(feeders);
-			<AllValue<T, I>>::remove_prefix(&feeder);
+			<AllValue<T, I>>::remove_prefix(&feeder, None);
 
 			Self::deposit_event(Event::RemoveFeeder(feeder));
 
