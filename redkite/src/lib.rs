@@ -58,7 +58,7 @@ pub mod pallet {
 		pub claimed: BalanceOf<T>,
 	}
 
-	/// A destination account for payment.
+	/// Redkite Tier System
 	#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug)]
 	pub enum Tier {
 		/// Phoenix
@@ -73,9 +73,19 @@ pub mod pallet {
 		None,
 	}
 
+	/// Permission System
+	#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug)]
+	pub enum Permission {
+		/// Administrator
+		Administrator,
+		/// Operation
+		Operator,
+	}
+
 	#[derive(Default, Clone, Encode, Decode, RuntimeDebug)]
 	pub struct UserInfo<T:Config> {
 		pub total_staked: BalanceOf<T>,
+		pub bonus: BalanceOf<T>,
 		pub last_staked_at: u64,
 	}
 
@@ -94,8 +104,18 @@ pub mod pallet {
 			}
 		}
 
+		pub fn add_bonus(&mut self, amount: BalanceOf<T>) {
+			self.bonus = self.bonus.saturating_add(amount);
+		}
+
+		pub fn sub_bonus(&mut self, amount: BalanceOf<T>) {
+			if self.bonus >= amount {
+				self.bonus = self.bonus.saturating_sub(amount);
+			}
+		}
+
 		pub fn point(self) -> BalanceOf<T> {
-			self.total_staked
+			self.total_staked.saturating_add(self.bonus)
 		}
 
 		// TODO: calculate tier based on their point
@@ -114,7 +134,6 @@ pub mod pallet {
 	// - Add setting for calculate Tier
 	// - Add Bonus external system point (~~ ePKF)
 	// - Convert token type: u32 --> tokens::CurrencyId
-	// - Admin & Operations permissions (avoid sudo call)
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -129,7 +148,8 @@ pub mod pallet {
 			funding_wallet: T::AccountId,
 			signer: T::AccountId
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
 
 			let close_time = open_time.saturating_add(duration);
 			Pools::<T>::insert(pool_id, PoolInfo{
@@ -151,7 +171,8 @@ pub mod pallet {
 			pool_id: u32,
 			winners: Vec<(T::AccountId, BalanceOf<T>)>, // (account,max_amount)
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
 			// TODO: clear the old winners
 
 			for (who, amount) in winners {
@@ -175,7 +196,8 @@ pub mod pallet {
 			offered_currency_decimals: u32,
 			offered_currency_rate: u32,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
 
 			OfferedCurrencies::<T>::insert(offered_currency, CurrencyInfo{
 				offered_currency_decimals,
@@ -191,7 +213,8 @@ pub mod pallet {
 			pool_id: u32,
 			close_time: u64,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
 
 			let mut pool = Pools::<T>::get(pool_id).ok_or(Error::<T>::PoolNotFound)?;
 			pool.close_time = close_time;
@@ -207,7 +230,8 @@ pub mod pallet {
 			pool_id: u32,
 			open_time: u64,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
 
 			let mut pool = Pools::<T>::get(pool_id).ok_or(Error::<T>::PoolNotFound)?;
 			pool.open_time = open_time;
@@ -259,6 +283,9 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			let now = T::UnixTime::now().as_secs();
 
+			let _ = T::Currency::transfer(&who, &Self::account_id(), amount, AllowDeath)
+				.map_err(|_| Error::<T>::StakeTokenFailed)?;
+
 			let mut info = RedkitePoints::<T>::get(&who).ok_or(Error::<T>::UserNotFound)?;
 			info.stake(amount, now);
 
@@ -282,12 +309,35 @@ pub mod pallet {
 
 			Ok(Default::default())
 		}
+
+		#[pallet::weight(0)]
+		pub fn grant_administrators(origin: OriginFor<T>, accounts: Vec<T::AccountId>) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
+
+			for account in accounts {
+				PermissionsSystem::<T>::insert(&account, Permission::Operator);
+				Self::deposit_event(Event::GrantAdministrator(account));
+			}
+			Ok(Default::default())
+		}
+
+		#[pallet::weight(0)]
+		pub fn grant_operators(origin: OriginFor<T>, accounts: Vec<T::AccountId>) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_operator(who), Error::<T>::InvalidPermission);
+
+			for account in accounts {
+				PermissionsSystem::<T>::insert(&account, Permission::Operator);
+				Self::deposit_event(Event::GrantOperator(account));
+			}
+			Ok(Default::default())
+		}
 	}
 
 	#[pallet::storage]
 	#[pallet::getter(fn pools)]
-	pub type Pools<T: Config> =
-	StorageMap<_, Blake2_128Concat, u32, PoolInfo<T>>;
+	pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, u32, PoolInfo<T>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn winners)]
@@ -296,13 +346,15 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn offered_currencies)]
-	pub type OfferedCurrencies<T: Config> =
-	StorageMap<_, Blake2_128Concat, u32, CurrencyInfo>;
+	pub type OfferedCurrencies<T: Config> = StorageMap<_, Blake2_128Concat, u32, CurrencyInfo>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn redkite_points)]
-	pub type RedkitePoints<T: Config> =
-	StorageMap<_, Blake2_128Concat, T::AccountId, UserInfo<T>>;
+	pub type RedkitePoints<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, UserInfo<T>>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn permissions_system)]
+	pub type PermissionsSystem<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Permission>;
 
 	#[pallet::error]
 	pub enum Error<T> {
@@ -318,12 +370,16 @@ pub mod pallet {
 		PurchaseAmountBelowMinimum,
 		/// The amount of purchase above the maximum
 		PurchaseAmountAboveMaximum,
+		/// Token is staked failed
+		StakeTokenFailed,
 		/// Token is bought failed
 		BuyTokenFailed,
 		/// User not found
 		UserNotFound,
 		/// Insufficient Balance
 		InsufficientBalance,
+		/// Invalid permisison
+		InvalidPermission,
 	}
 
 	#[pallet::event]
@@ -335,6 +391,31 @@ pub mod pallet {
 		TokenClaimed(u32, u32, u32, u32),
 		UserStaked(T::AccountId, BalanceOf<T>, u64),
 		UserUnStaked(T::AccountId, BalanceOf<T>, u64),
+		GrantAdministrator(T::AccountId),
+		GrantOperator(T::AccountId),
+	}
+
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub administrators: Vec<T::AccountId>
+	}
+
+	#[cfg(feature = "std")]
+	impl <T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self {
+				administrators: Vec::default(),
+			}
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			for account in &self.administrators {
+				PermissionsSystem::<T>::insert(&account, Permission::Administrator);
+			}
+		}
 	}
 
 	#[pallet::extra_constants]
@@ -365,6 +446,20 @@ pub mod pallet {
 			match OfferedCurrencies::<T>::get(address) {
 				Some(item) => item.offered_currency_decimals,
 				None => 0,
+			}
+		}
+
+		pub fn is_admin(account: T::AccountId) -> bool {
+			match PermissionsSystem::<T>::get(&account) {
+				Some(item) => item.eq(&Permission::Administrator),
+				None => false,
+			}
+		}
+
+		pub fn is_operator(account: T::AccountId) -> bool {
+			match PermissionsSystem::<T>::get(&account) {
+				Some(item) => item.eq(&Permission::Operator),
+				None => false,
 			}
 		}
 	}
