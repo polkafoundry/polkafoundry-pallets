@@ -1,12 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-
 use frame_support::pallet;
 pub use pallet::*;
 
-// #[cfg(test)]
-// pub(crate) mod mock;
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+pub(crate) mod mock;
+#[cfg(test)]
+mod tests;
 
 use frame_support::{
 	pallet_prelude::*,
@@ -21,10 +20,9 @@ use sp_runtime::{
 	Perbill,
 };
 use sp_std::{convert::From, vec::Vec};
+
 const REDKITE_ID: LockIdentifier = *b"redkite ";
-
 pub type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
 pub type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 
 #[pallet]
@@ -49,7 +47,6 @@ pub mod pallet {
 		pub close_time: MomentOf<T>,
 		pub offered_currency: u32,
 		pub funding_wallet: T::AccountId,
-		pub signer: T::AccountId,
 	}
 
 	#[derive(Default, Clone, Encode, Decode, RuntimeDebug)]
@@ -161,7 +158,6 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
-	// TODO:
 	// - Add setting for calculate Tier
 	// - Add Bonus external system point (~~ ePKF)
 	// - Convert token type: u32 --> tokens::CurrencyId
@@ -177,7 +173,6 @@ pub mod pallet {
 			open_time: MomentOf<T>,
 			offered_currency: u32,
 			funding_wallet: T::AccountId,
-			signer: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
@@ -191,7 +186,6 @@ pub mod pallet {
 					close_time,
 					offered_currency: offered_currency.clone(),
 					funding_wallet: funding_wallet.clone(),
-					signer: signer.clone(),
 				},
 			);
 
@@ -202,7 +196,6 @@ pub mod pallet {
 				close_time,
 				offered_currency,
 				funding_wallet,
-				signer,
 			));
 			Ok(Default::default())
 		}
@@ -270,7 +263,6 @@ pub mod pallet {
 				pool.close_time,
 				pool.offered_currency,
 				pool.funding_wallet,
-				pool.signer,
 			));
 			Ok(Default::default())
 		}
@@ -291,7 +283,6 @@ pub mod pallet {
 				pool.close_time,
 				pool.offered_currency,
 				pool.funding_wallet,
-				pool.signer,
 			));
 			Ok(Default::default())
 		}
@@ -317,7 +308,7 @@ pub mod pallet {
 				Error::<T>::PurchaseAmountAboveMaximum
 			);
 
-			let _ = T::Currency::transfer(&who, &Self::account_id(), amount, AllowDeath)
+			let _ = T::Currency::transfer(&who, &pool.funding_wallet, amount, AllowDeath)
 				.map_err(|_| Error::<T>::BuyTokenFailed)?;
 
 			winner.purchased = winner.purchased.saturating_add(token_amount);
@@ -373,7 +364,7 @@ pub mod pallet {
 			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
 
 			for account in accounts {
-				PermissionsSystem::<T>::insert(&account, Permission::Operator);
+				PermissionsSystem::<T>::insert(&account, Permission::Administrator);
 				Self::deposit_event(Event::GrantAdministrator(account));
 			}
 			Ok(Default::default())
@@ -444,7 +435,7 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(fn deposit_event)]
 	pub enum Event<T: Config> {
-		PoolChanged(u32, u32, MomentOf<T>, MomentOf<T>, u32, T::AccountId, T::AccountId),
+		PoolChanged(u32, u32, MomentOf<T>, MomentOf<T>, u32, T::AccountId),
 		OfferedCurrenciesChanged(u32, u32, u32),
 		TokenPurchased(u32, T::AccountId, BalanceOf<T>),
 		TokenClaimed(u32, u32, u32, u32),
