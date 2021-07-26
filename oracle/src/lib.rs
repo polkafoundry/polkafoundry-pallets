@@ -38,7 +38,7 @@ pub struct TimestampedValue<Value, Moment> {
 	pub timestamp: Moment,
 }
 
-
+//TODO: Should we deduct fee from callers?
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;

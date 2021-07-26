@@ -8,20 +8,20 @@ pub trait DataFeeder<Key, Value, AccountId> {
 }
 
 /// A simple trait to provide data
-pub trait DataProvider<Key, TimestampedValue> {
+pub trait DataProvider<Key, Value> {
 	/// Get data by key
-	fn get(key: &Key) -> Option<TimestampedValue>;
+	fn get(key: &Key) -> Option<Value>;
 }
 
 /// Extended data provider to provide timestamped data by key with no-op, and
 /// all data.
-pub trait DataProviderExtended<Key, AccountId, TimestampedValue> {
+pub trait DataProviderExtended<Key, AccountId, Value> {
 	/// Get timestamped value by key
-	fn get_polkafoundry(key: &Key, feeder: AccountId) -> Option<TimestampedValue>;
+	fn get_polkafoundry(key: &Key, feeder: AccountId) -> Option<Value>;
 	/// Get timestamped value by key
-	fn get_concrete(key: &Key, feeder: AccountId) -> Option<TimestampedValue>;
+	fn get_concrete(key: &Key, feeder: AccountId) -> Option<Value>;
 	/// Provide a list of tuples of key and timestamped value
-	fn get_all_values() -> Vec<(Key, Option<TimestampedValue>)>;
+	fn get_all_values() -> Vec<(Key, Option<Value>)>;
 }
 
 #[allow(dead_code)] // rust cannot detect usage in macro_rules
