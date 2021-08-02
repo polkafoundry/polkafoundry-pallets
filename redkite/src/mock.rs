@@ -1,14 +1,14 @@
 use crate::{self as pallet_redkite, Config};
-use frame_support::{construct_runtime, parameter_types, PalletId, assert_ok};
+use frame_support::{assert_ok, construct_runtime, parameter_types, PalletId};
 
-use sp_core::{H256};
+use frame_support::traits::GenesisBuild;
+use sp_core::H256;
 use sp_io;
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
 };
-use sp_std::convert::{From};
-use frame_support::traits::{GenesisBuild};
+use sp_std::convert::From;
 
 pub type AccountId = u64;
 pub type Balance = u128;
@@ -97,6 +97,10 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub const INIT_BALANCE: u128 = 100_000_000;
 pub const MINIMUM_BALANCE: u128 = ExistentialDeposit::get();
+pub const DEFAULT_TIER_DOVE: u128 = 500;
+pub const DEFAULT_TIER_HAWK: u128 = 5_000;
+pub const DEFAULT_TIER_EAGLE: u128 = 20_000;
+pub const DEFAULT_TIER_PHOENIX: u128 = 60_000;
 
 // default pool
 pub const DEFAULT_ADMIN_ID: AccountId = 1;
@@ -124,17 +128,18 @@ construct_runtime!(
 pub struct ExtBuilder;
 
 impl ExtBuilder {
-	pub fn build(administrators: Vec<u64>) -> sp_io::TestExternalities {
+	pub fn build(administrators: Vec<u64>, tiers: Vec<u128>) -> sp_io::TestExternalities {
 		let mut storage = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 		// Provide some initial balances
-		pallet_balances::GenesisConfig::<Test> {balances: vec![(Redkite::account_id(), INIT_BALANCE)]}
-			.assimilate_storage(&mut storage)
-			.unwrap();
+		pallet_balances::GenesisConfig::<Test> {
+			balances: vec![(Redkite::account_id(), INIT_BALANCE)],
+		}
+		.assimilate_storage(&mut storage)
+		.unwrap();
 
 		// mock: reward from block 4 to block 14
-		pallet_redkite::GenesisConfig::<Test> {
-			administrators,
-		}.assimilate_storage(&mut storage)
+		pallet_redkite::GenesisConfig::<Test> { administrators, tiers }
+			.assimilate_storage(&mut storage)
 			.unwrap();
 
 		let mut ext = sp_io::TestExternalities::from(storage);
@@ -156,7 +161,15 @@ impl ExtBuilder {
 }
 
 pub(crate) fn mock_test() -> sp_io::TestExternalities {
-	ExtBuilder::build(vec![1u64, 2u64, 3u64])
+	ExtBuilder::build(
+		vec![1u64, 2u64, 3u64],
+		vec![
+			DEFAULT_TIER_DOVE,
+			DEFAULT_TIER_HAWK,
+			DEFAULT_TIER_EAGLE,
+			DEFAULT_TIER_PHOENIX,
+		],
+	)
 }
 
 // pub(crate) fn events() -> Vec<super::Event<Test>> {

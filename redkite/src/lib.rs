@@ -40,13 +40,45 @@ pub mod pallet {
 		type Time: Time;
 	}
 
-	#[derive(Default, Clone, Encode, Decode, RuntimeDebug)]
+	#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug)]
 	pub struct PoolInfo<T: Config> {
 		pub token: u32, // address
 		pub open_time: MomentOf<T>,
 		pub close_time: MomentOf<T>,
 		pub offered_currency: u32,
 		pub funding_wallet: T::AccountId,
+	}
+
+	#[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug)]
+	pub struct SettingStruct<T: Config> {
+		pub tier_minimum_points: Vec<(Tier, BalanceOf<T>)>,
+	}
+
+	impl<T> SettingStruct<T>
+	where
+		T: Config,
+	{
+		pub fn update_tier_system(&mut self, new_tier_points: Vec<BalanceOf<T>>) {
+			if new_tier_points.len() != 4 {
+				return;
+			}
+
+			let mut tiers: Vec<(Tier, BalanceOf<T>)> = Vec::new();
+			tiers.push((Tier::Dove, new_tier_points[0]));
+			tiers.push((Tier::Hawk, new_tier_points[1]));
+			tiers.push((Tier::Eagle, new_tier_points[2]));
+			tiers.push((Tier::Phoenix, new_tier_points[3]));
+
+			self.tier_minimum_points = tiers;
+		}
+	}
+
+	impl<T: Config> Default for SettingStruct<T> {
+		fn default() -> Self {
+			Self {
+				tier_minimum_points: Vec::default(),
+			}
+		}
 	}
 
 	#[derive(Default, Clone, Encode, Decode, RuntimeDebug)]
@@ -124,23 +156,26 @@ pub mod pallet {
 			}
 		}
 
-		pub fn add_bonus(&mut self, amount: BalanceOf<T>) {
-			self.bonus = self.bonus.saturating_add(amount);
-		}
-
-		pub fn sub_bonus(&mut self, amount: BalanceOf<T>) {
-			if self.bonus >= amount {
-				self.bonus = self.bonus.saturating_sub(amount);
-			}
+		pub fn set_bonus(&mut self, amount: BalanceOf<T>) {
+			self.bonus = amount;
 		}
 
 		pub fn point(self) -> BalanceOf<T> {
 			self.total_staked.saturating_add(self.bonus)
 		}
 
-		// TODO: calculate tier based on their point
-		pub fn tier() -> Tier {
-			Tier::None
+		pub fn tier(self) -> Tier {
+			let setting = Settings::<T>::get();
+			let point = self.point();
+			let mut result = Tier::None;
+
+			for (tier, amount) in setting.tier_minimum_points {
+				if point >= amount {
+					result = tier
+				}
+			}
+
+			result
 		}
 
 		fn default() -> Self {
@@ -381,6 +416,43 @@ pub mod pallet {
 			}
 			Ok(Default::default())
 		}
+
+		#[pallet::weight(0)]
+		pub fn set_bonus(
+			origin: OriginFor<T>,
+			accounts: Vec<(T::AccountId, BalanceOf<T>)>,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
+
+			for (account, amount) in accounts {
+				let mut info = match RedkitePoints::<T>::get(&account) {
+					Some(item) => item,
+					None => UserInfo::default(),
+				};
+				info.set_bonus(amount);
+				RedkitePoints::<T>::insert(&account, info);
+			}
+			Ok(Default::default())
+		}
+
+		#[pallet::weight(0)]
+		pub fn update_tier_setting(
+			origin: OriginFor<T>,
+			tier_minimum_points: Vec<BalanceOf<T>>,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
+			// Dove, Hawk, Eagle, Phoenix
+			ensure!(tier_minimum_points.len() == 4, Error::<T>::InvalidTierSetting);
+
+			let mut setting = Settings::<T>::get();
+			setting.update_tier_system(tier_minimum_points);
+			Settings::<T>::put(setting);
+			// Self::deposit_event(Event::UpdateSetting(setting.clone()));
+
+			Ok(Default::default())
+		}
 	}
 
 	#[pallet::storage]
@@ -403,6 +475,10 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn permissions_system)]
 	pub type PermissionsSystem<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Permission>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn settings)]
+	pub type Settings<T: Config> = StorageValue<_, SettingStruct<T>, ValueQuery>;
 
 	#[pallet::error]
 	pub enum Error<T> {
@@ -430,6 +506,8 @@ pub mod pallet {
 		InsufficientBalance,
 		/// Invalid permisison
 		InvalidPermission,
+		/// Invalid tier system
+		InvalidTierSetting,
 	}
 
 	#[pallet::event]
@@ -443,11 +521,13 @@ pub mod pallet {
 		UserUnStaked(T::AccountId, BalanceOf<T>, MomentOf<T>),
 		GrantAdministrator(T::AccountId),
 		GrantOperator(T::AccountId),
+		// UpdateSetting(SettingStruct<T>),
 	}
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
 		pub administrators: Vec<T::AccountId>,
+		pub tiers: Vec<BalanceOf<T>>,
 	}
 
 	#[cfg(feature = "std")]
@@ -455,6 +535,7 @@ pub mod pallet {
 		fn default() -> Self {
 			Self {
 				administrators: Vec::default(),
+				tiers: Vec::default(),
 			}
 		}
 	}
@@ -465,6 +546,9 @@ pub mod pallet {
 			for account in &self.administrators {
 				PermissionsSystem::<T>::insert(&account, Permission::Administrator);
 			}
+			let mut setting = Settings::<T>::get();
+			setting.update_tier_system(self.tiers.clone());
+			Settings::<T>::put(setting);
 		}
 	}
 
