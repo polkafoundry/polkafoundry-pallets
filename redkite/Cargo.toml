@@ -1,0 +1,46 @@
+[package]
+name = "pallet-redkite"
+version = "0.0.1"
+authors = ["Hai Duong<hai.duong@icetea.io>"]
+edition = "2018"
+
+# alias "parity-scale-code" to "codec"
+[dependencies.codec]
+default-features = false
+features = ['derive']
+package = 'parity-scale-codec'
+version = '2.0.0'
+
+[dependencies]
+serde = { version = "1.0.119" }
+
+frame-support = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+frame-system = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+sp-core = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+sp-io = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+sp-runtime = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+sp-std = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+
+pallet-balances = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.8" }
+pallet-utility = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.8" }
+orml-traits = { default-features = false, path = "../traits" }
+
+[dev-dependencies]
+pallet-timestamp = { default-features = false, git = 'https://github.com/paritytech/substrate.git', branch = 'polkadot-v0.9.8' }
+orml-tokens = { package = "orml-tokens", path = "../tokens" }
+
+[features]
+default = ['std']
+std = [
+    'codec/std',
+    'frame-support/std',
+    'frame-system/std',
+    'pallet-balances/std',
+    'pallet-utility/std',
+    'sp-core/std',
+    'sp-io/std',
+    'sp-runtime/std',
+    'sp-std/std',
+    'pallet-timestamp/std',
+    'orml-traits/std',
+]
