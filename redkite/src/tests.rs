@@ -5,8 +5,6 @@ use mock::*;
 #[test]
 fn init_pool_work() {
 	mock_test().execute_with(|| {
-		assert_eq!(Redkite::pot(), INIT_BALANCE - MINIMUM_BALANCE);
-
 		// test administrator permission
 		assert_noop!(
 			Redkite::init_pool(
@@ -154,7 +152,6 @@ fn stake_and_tier_work() {
 #[test]
 fn set_pool_winners_work() {
 	mock_test().execute_with(|| {
-		assert_eq!(Redkite::pot(), INIT_BALANCE - MINIMUM_BALANCE);
 		assert_eq!(Redkite::pools(1).unwrap().funding_wallet, DEFAULT_FUNDING_WALLET);
 	})
 }

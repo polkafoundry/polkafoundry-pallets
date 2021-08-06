@@ -9,14 +9,13 @@ mod tests;
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{
-		Currency, ExistenceRequirement::AllowDeath, IsType, LockIdentifier, LockableCurrency, Time, WithdrawReasons,
-	},
+	traits::{Currency, IsType, LockIdentifier, LockableCurrency, Time, WithdrawReasons},
 	PalletId,
 };
 use frame_system::pallet_prelude::*;
+use orml_traits::MultiCurrency;
 use sp_runtime::{
-	traits::{AccountIdConversion, CheckedSub, Saturating, Zero},
+	traits::{AccountIdConversion, Saturating, Zero},
 	Perbill,
 };
 use sp_std::{convert::From, vec::Vec};
@@ -24,6 +23,10 @@ use sp_std::{convert::From, vec::Vec};
 const REDKITE_ID: LockIdentifier = *b"redkite ";
 pub type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 pub type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
+pub type BalanceOfCurrency<T> =
+	<<T as Config>::MultiCurrency as MultiCurrency<<T as frame_system::Config>::AccountId>>::Balance;
+pub type CurrencyIdOf<T> =
+	<<T as Config>::MultiCurrency as MultiCurrency<<T as frame_system::Config>::AccountId>>::CurrencyId;
 
 #[pallet]
 pub mod pallet {
@@ -37,16 +40,20 @@ pub mod pallet {
 
 		type Currency: LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>;
 
+		type MultiCurrency: MultiCurrency<Self::AccountId>;
+
 		type Time: Time;
 	}
 
 	#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug)]
 	pub struct PoolInfo<T: Config> {
-		pub token: u32, // address
+		pub token: CurrencyIdOf<T>,
 		pub open_time: MomentOf<T>,
 		pub close_time: MomentOf<T>,
-		pub offered_currency: u32,
+		pub offered_currency: CurrencyIdOf<T>,
 		pub funding_wallet: T::AccountId,
+		pub offered_currency_decimals: u32, // for calculate price
+		pub offered_currency_rate: u32,     // for calculate price
 	}
 
 	#[derive(Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug)]
@@ -82,24 +89,18 @@ pub mod pallet {
 	}
 
 	#[derive(Default, Clone, Encode, Decode, RuntimeDebug)]
-	pub struct CurrencyInfo {
-		pub offered_currency_decimals: u32,
-		pub offered_currency_rate: u32,
-	}
-
-	#[derive(Default, Clone, Encode, Decode, RuntimeDebug)]
 	pub struct UserWinnerInfo<T: Config> {
-		pub max_purchased: BalanceOf<T>,
-		pub min_purchased: BalanceOf<T>,
-		pub purchased: BalanceOf<T>,
-		pub claimed: BalanceOf<T>,
+		pub max_purchased: BalanceOfCurrency<T>,
+		pub min_purchased: BalanceOfCurrency<T>,
+		pub purchased: BalanceOfCurrency<T>,
+		pub claimed: BalanceOfCurrency<T>,
 	}
 
 	impl<T> UserWinnerInfo<T>
 	where
 		T: Config,
 	{
-		pub fn default_with_max_purchased(amount: BalanceOf<T>) -> Self {
+		pub fn default_with_max_purchased(amount: BalanceOfCurrency<T>) -> Self {
 			Self {
 				min_purchased: Zero::zero(),
 				max_purchased: amount,
@@ -193,20 +194,16 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
-	// - Add setting for calculate Tier
-	// - Add Bonus external system point (~~ ePKF)
-	// - Convert token type: u32 --> tokens::CurrencyId
-
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(0)]
 		pub fn init_pool(
 			origin: OriginFor<T>,
 			pool_id: u32,
-			token: u32,
+			token: CurrencyIdOf<T>,
 			duration: MomentOf<T>,
 			open_time: MomentOf<T>,
-			offered_currency: u32,
+			offered_currency: CurrencyIdOf<T>,
 			funding_wallet: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
@@ -216,11 +213,13 @@ pub mod pallet {
 			Pools::<T>::insert(
 				pool_id,
 				PoolInfo {
-					token: token.clone(),
+					token,
 					open_time,
 					close_time,
-					offered_currency: offered_currency.clone(),
+					offered_currency,
 					funding_wallet: funding_wallet.clone(),
+					offered_currency_rate: 0,
+					offered_currency_decimals: 0,
 				},
 			);
 
@@ -231,6 +230,8 @@ pub mod pallet {
 				close_time,
 				offered_currency,
 				funding_wallet,
+				0,
+				0,
 			));
 			Ok(Default::default())
 		}
@@ -239,7 +240,7 @@ pub mod pallet {
 		pub fn set_pool_winners(
 			origin: OriginFor<T>,
 			pool_id: u32,
-			winners: Vec<(T::AccountId, BalanceOf<T>)>, // (account,max_amount)
+			winners: Vec<(T::AccountId, BalanceOfCurrency<T>)>, // (account,max_amount)
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
@@ -250,31 +251,6 @@ pub mod pallet {
 				Winners::<T>::insert(pool_id, &who, new_user_winner_info);
 			}
 
-			Ok(Default::default())
-		}
-
-		#[pallet::weight(0)]
-		pub fn set_offered_currency_rate_and_decimals(
-			origin: OriginFor<T>,
-			offered_currency: u32,
-			offered_currency_decimals: u32,
-			offered_currency_rate: u32,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
-
-			OfferedCurrencies::<T>::insert(
-				offered_currency,
-				CurrencyInfo {
-					offered_currency_decimals,
-					offered_currency_rate,
-				},
-			);
-			Self::deposit_event(Event::OfferedCurrenciesChanged(
-				offered_currency,
-				offered_currency_decimals,
-				offered_currency_rate,
-			));
 			Ok(Default::default())
 		}
 
@@ -298,6 +274,8 @@ pub mod pallet {
 				pool.close_time,
 				pool.offered_currency,
 				pool.funding_wallet,
+				pool.offered_currency_rate,
+				pool.offered_currency_decimals,
 			));
 			Ok(Default::default())
 		}
@@ -318,19 +296,26 @@ pub mod pallet {
 				pool.close_time,
 				pool.offered_currency,
 				pool.funding_wallet,
+				pool.offered_currency_rate,
+				pool.offered_currency_decimals,
 			));
 			Ok(Default::default())
 		}
 
 		#[pallet::weight(0)]
-		pub fn buy_token(origin: OriginFor<T>, pool_id: u32, amount: BalanceOf<T>) -> DispatchResultWithPostInfo {
+		pub fn buy_token(
+			origin: OriginFor<T>,
+			pool_id: u32,
+			amount: BalanceOfCurrency<T>,
+		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
 			let pool = Pools::<T>::get(pool_id).ok_or(Error::<T>::PoolNotFound)?;
 			let mut winner = Winners::<T>::get(pool_id, &who).ok_or(Error::<T>::WinnerNotFound)?;
-			let rate = OfferedCurrencies::<T>::get(pool.token).ok_or(Error::<T>::RateNotFound)?;
-			let token_amount = Perbill::from_rational(1, 10u32.saturating_pow(rate.offered_currency_decimals)) // 1/10^decimals
-				.mul_floor(amount.saturating_mul(rate.offered_currency_rate.into()));
+			ensure!(pool.offered_currency_rate > 0, Error::<T>::RateNotFound);
+
+			let token_amount = Perbill::from_rational(1, 10u32.saturating_pow(pool.offered_currency_decimals)) // 1/10^decimals
+				.mul_floor(amount.saturating_mul(pool.offered_currency_rate.into()));
 
 			let now = T::Time::now();
 			ensure!(pool.open_time <= now && pool.close_time >= now, Error::<T>::PoolClosed);
@@ -343,7 +328,7 @@ pub mod pallet {
 				Error::<T>::PurchaseAmountAboveMaximum
 			);
 
-			let _ = T::Currency::transfer(&who, &pool.funding_wallet, amount, AllowDeath)
+			let _ = T::MultiCurrency::transfer(pool.offered_currency, &who, &pool.funding_wallet, amount)
 				.map_err(|_| Error::<T>::BuyTokenFailed)?;
 
 			winner.purchased = winner.purchased.saturating_add(token_amount);
@@ -354,9 +339,27 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(0)]
-		pub fn claim_token(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			let _ = ensure_signed(origin)?;
-			// TODO: transfer token to users
+		pub fn claim_token(
+			origin: OriginFor<T>,
+			pool_id: u32,
+			amount: BalanceOfCurrency<T>,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			let pool = Pools::<T>::get(pool_id).ok_or(Error::<T>::PoolNotFound)?;
+			let mut winner = Winners::<T>::get(pool_id, &who).ok_or(Error::<T>::WinnerNotFound)?;
+
+			ensure!(
+				winner.claimed.saturating_add(amount) <= winner.purchased,
+				Error::<T>::ClaimAmountAboveMaximum
+			);
+
+			let _ = T::MultiCurrency::transfer(pool.token, &Self::account_id(), &who, amount)
+				.map_err(|_| Error::<T>::ClaimTokenFailed)?;
+
+			winner.claimed = winner.claimed + amount;
+			Winners::<T>::insert(pool_id, &who, winner);
+
+			Self::deposit_event(Event::TokenClaimed(pool_id, who, pool.token, amount));
 			Ok(Default::default())
 		}
 
@@ -449,7 +452,38 @@ pub mod pallet {
 			let mut setting = Settings::<T>::get();
 			setting.update_tier_system(tier_minimum_points);
 			Settings::<T>::put(setting);
-			// Self::deposit_event(Event::UpdateSetting(setting.clone()));
+
+			Ok(Default::default())
+		}
+
+		// 1 IDO Token = rate / (10**decimals) Currency
+		#[pallet::weight(0)]
+		pub fn set_offered_currency(
+			origin: OriginFor<T>,
+			pool_id: u32,
+			currency: CurrencyIdOf<T>,
+			offered_currency_decimals: u32,
+			offered_currency_rate: u32,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			ensure!(Self::is_admin(who), Error::<T>::InvalidPermission);
+
+			let mut pool = Pools::<T>::get(pool_id).ok_or(Error::<T>::PoolNotFound)?;
+			pool.offered_currency_decimals = offered_currency_decimals;
+			pool.offered_currency_rate = offered_currency_rate;
+			pool.offered_currency = currency;
+
+			Pools::<T>::insert(pool_id, pool.clone());
+			Self::deposit_event(Event::PoolChanged(
+				pool_id,
+				pool.token,
+				pool.open_time,
+				pool.close_time,
+				pool.offered_currency,
+				pool.funding_wallet,
+				pool.offered_currency_rate,
+				pool.offered_currency_decimals,
+			));
 
 			Ok(Default::default())
 		}
@@ -463,10 +497,6 @@ pub mod pallet {
 	#[pallet::getter(fn winners)]
 	pub type Winners<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, u32, Blake2_128Concat, T::AccountId, UserWinnerInfo<T>>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn offered_currencies)]
-	pub type OfferedCurrencies<T: Config> = StorageMap<_, Blake2_128Concat, u32, CurrencyInfo>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn redkite_points)]
@@ -494,12 +524,16 @@ pub mod pallet {
 		PurchaseAmountBelowMinimum,
 		/// The amount of purchase above the maximum
 		PurchaseAmountAboveMaximum,
+		/// The amount of claim above the maximum
+		ClaimAmountAboveMaximum,
 		/// Token is staked failed
 		StakeTokenFailed,
 		/// Token is unstaked failed
 		UnstakeTokenFailed,
 		/// Token is bought failed
 		BuyTokenFailed,
+		/// Token is claimed failed
+		ClaimTokenFailed,
 		/// User not found
 		UserNotFound,
 		/// Insufficient Balance
@@ -513,15 +547,22 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(fn deposit_event)]
 	pub enum Event<T: Config> {
-		PoolChanged(u32, u32, MomentOf<T>, MomentOf<T>, u32, T::AccountId),
-		OfferedCurrenciesChanged(u32, u32, u32),
-		TokenPurchased(u32, T::AccountId, BalanceOf<T>),
-		TokenClaimed(u32, u32, u32, u32),
+		PoolChanged(
+			u32,
+			CurrencyIdOf<T>,
+			MomentOf<T>,
+			MomentOf<T>,
+			CurrencyIdOf<T>,
+			T::AccountId,
+			u32,
+			u32,
+		),
+		TokenPurchased(u32, T::AccountId, BalanceOfCurrency<T>),
+		TokenClaimed(u32, T::AccountId, CurrencyIdOf<T>, BalanceOfCurrency<T>),
 		UserStaked(T::AccountId, BalanceOf<T>, MomentOf<T>),
 		UserUnStaked(T::AccountId, BalanceOf<T>, MomentOf<T>),
 		GrantAdministrator(T::AccountId),
 		GrantOperator(T::AccountId),
-		// UpdateSetting(SettingStruct<T>),
 	}
 
 	#[pallet::genesis_config]
@@ -561,29 +602,9 @@ pub mod pallet {
 		pub fn account_id() -> T::AccountId {
 			T::PalletId::get().into_account()
 		}
-
-		pub fn pot() -> BalanceOf<T> {
-			T::Currency::free_balance(&Self::account_id())
-				.checked_sub(&T::Currency::minimum_balance())
-				.unwrap_or_else(Zero::zero)
-		}
 	}
 
 	impl<T: Config> Pallet<T> {
-		pub fn get_offered_currency_rate(address: u32) -> u32 {
-			match OfferedCurrencies::<T>::get(address) {
-				Some(item) => item.offered_currency_rate,
-				None => 0,
-			}
-		}
-
-		pub fn get_offered_currency_decimals(address: u32) -> u32 {
-			match OfferedCurrencies::<T>::get(address) {
-				Some(item) => item.offered_currency_decimals,
-				None => 0,
-			}
-		}
-
 		pub fn is_admin(account: T::AccountId) -> bool {
 			match PermissionsSystem::<T>::get(&account) {
 				Some(item) => item == Permission::Administrator,

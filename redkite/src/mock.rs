@@ -2,17 +2,19 @@ use crate::{self as pallet_redkite, Config};
 use frame_support::{assert_ok, construct_runtime, parameter_types, PalletId};
 
 use frame_support::traits::GenesisBuild;
+use orml_traits::parameter_type_with_key;
 use sp_core::H256;
 use sp_io;
 use sp_runtime::{
 	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
 };
 use sp_std::convert::From;
 
 pub type AccountId = u64;
 pub type Balance = u128;
 pub type Moment = u64;
+type CurrencyId = u32;
 
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
@@ -48,8 +50,8 @@ impl frame_system::Config for Test {
 
 parameter_types! {
 	pub const ExistentialDeposit: u128 = 1;
-	pub const MaxLocks: u32 = 50;
-	pub const MaxReserves: u32 = 50;
+	pub const MaxLocks: u32 = 100_000;
+	pub const MaxReserves: u32 = 100_000;
 }
 
 impl pallet_balances::Config for Test {
@@ -68,6 +70,27 @@ impl pallet_utility::Config for Test {
 	type Event = Event;
 	type Call = Call;
 	type WeightInfo = ();
+}
+
+parameter_type_with_key! {
+	pub ExistentialDeposits: |_currency_id: CurrencyId| -> Balance {
+		Default::default()
+	};
+}
+
+parameter_types! {
+	pub DustAccount: AccountId = PalletId(*b"orml/dst").into_account();
+}
+
+impl orml_tokens::Config for Test {
+	type Event = Event;
+	type Balance = Balance;
+	type Amount = i64;
+	type CurrencyId = CurrencyId;
+	type WeightInfo = ();
+	type ExistentialDeposits = ExistentialDeposits;
+	type OnDust = orml_tokens::TransferDust<Test, DustAccount>;
+	type MaxLocks = MaxLocks;
 }
 
 parameter_types! {
@@ -90,13 +113,13 @@ impl Config for Test {
 	type Event = Event;
 	type PalletId = RedkitePalletId;
 	type Currency = Balances;
+	type MultiCurrency = Tokens;
 	type Time = Timestamp;
 }
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub const INIT_BALANCE: u128 = 100_000_000;
-pub const MINIMUM_BALANCE: u128 = ExistentialDeposit::get();
 pub const DEFAULT_TIER_DOVE: u128 = 500;
 pub const DEFAULT_TIER_HAWK: u128 = 5_000;
 pub const DEFAULT_TIER_EAGLE: u128 = 20_000;
@@ -121,6 +144,7 @@ construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Utility: pallet_utility::{Pallet, Call, Storage, Event},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage},
+		Tokens: orml_tokens::{Pallet, Storage, Event<T>, Config<T>},
 		Redkite: pallet_redkite::{Pallet, Call, Storage, Event<T>},
 	}
 );
